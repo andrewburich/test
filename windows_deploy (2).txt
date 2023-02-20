@@ -1,0 +1,96 @@
+﻿Set-StrictMode -Version 1
+
+### init/declare vars
+
+$Token = $null
+$Params = $null
+$Installer_id = $null
+$OutputPath = $null
+$Client_id = "82d1452c81a240b188d51ad01fa47a1d"
+$Client_secret = "toFpQx2zsqVDjiUr1Be4k3R6759fl0ICLM8YgXwc"
+$Customer_ID="EF35878C5A06464CB6B3B7EF692019BE-68"
+$AuthURL = "https://api.crowdstrike.com/oauth2/token"
+$Sha256URL = "https://api.crowdstrike.com/sensors/combined/installers/v1?offset=2&limit=1&sort=release_date%7Cdesc&filter=platform%3A%22windows%22"
+$DownloadURL = "https://api.crowdstrike.com/sensors/entities/download-installer/v1?id="
+
+### Functions
+
+function Get-AccessToken {
+
+$Params = @{
+    Method = "post"
+    Headers = @{
+        Accept = "application/json"
+        ContentType = "application/x-www-form-urlencoded"
+    }
+    Body = "client_id=$Client_id&client_secret=$Client_secret"
+    Uri = "$AuthURL"
+}
+
+(Invoke-RestMethod @Params).access_token
+}
+
+function Get-Sha256 {
+
+$Params = @{
+    Method = "get"
+    Headers = @{
+        Accept = "application/json"
+        Authorization = "Bearer $Token"
+    }
+    Uri = $Sha256URL
+}
+(Invoke-RestMethod @Params).resources.sha256
+}
+
+### Check if sensor is downloaded and delete
+
+$OutputPath = "~\WindowsSensor.exe"
+
+If (Test-Path $OutputPath) {
+    erase ~\WindowsSensor.exe
+}
+
+### Check if connection is successful to CrowdStrike platform
+
+If ((Invoke-WebRequest -UseBasicParsing -Uri "https://ts01-b.cloudsink.net:443").statuscode -eq 200) {}
+
+Else {
+
+Write-Error "Connection to CrowdStrike platform failed." -ErrorAction Stop
+
+}
+
+### Check if sensor is installed
+
+If ((Get-WmiObject -Class Win32_Product | where Name -eq "CrowdStrike Sensor Platform") -eq $null) {
+
+### Sensor is not installed; download and install
+
+$Token = Get-AccessToken
+
+$Installer_id = Get-Sha256
+
+$Params = @{
+    Headers = @{
+        Authorization = "Bearer $Token"
+    }
+    Uri = "$DownloadURL$Installer_id"
+    OutFile = $OutputPath
+}
+
+Invoke-WebRequest @Params
+
+C:\temp\WindowsSensor.exe /install /norestart /quiet CID=$Customer_ID | Out-Null
+
+erase ~\WindowsSensor.exe
+
+}
+
+Else
+
+{
+
+Write-Error "CrowdStrike Sensor is already installed." -ErrorAction Stop
+
+}
