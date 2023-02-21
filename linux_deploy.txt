@@ -55,7 +55,7 @@ ubuntu_install() {
 	echo "Ubuntu/Debian install selected, downloading installer"
 	$SUDO curl -o /tmp/FalconSensor.deb -s -H "Authorization: Bearer ${APITOKEN}" "https://api.crowdstrike.com/sensors/entities/download-installer/v1?id=${FALCON_SHA256}"
 	echo "Installing Falcon Sensor"
-	$SUDO dpkg -i /tmp/FalconSensor.deb
+	$SUDO apt -y install /tmp/FalconSensor.deb
 	echo "Installation completed, removing sensor installer"
 	$SUDO rm /tmp/FalconSensor.deb
 	$SUDO /opt/CrowdStrike/falconctl -s --cid=${CS_CCID} || true # Don't fail if the app is already licensed, but still needs a reinstall
