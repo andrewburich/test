@@ -1,4 +1,4 @@
-﻿Set-StrictMode -Version 1
+Set-StrictMode -Version 1
 
 ### init/declare vars
 
@@ -81,7 +81,7 @@ $Params = @{
 
 Invoke-WebRequest @Params
 
-C:\temp\WindowsSensor.exe /install /norestart /quiet CID=$Customer_ID | Out-Null
+~\WindowsSensor.exe /install /norestart /quiet CID=$Customer_ID | Out-Null
 
 erase ~\WindowsSensor.exe
 
