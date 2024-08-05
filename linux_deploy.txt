@@ -1,34 +1,152 @@
 #!/bin/bash
 
-# Configuration
+# Global Vars
 CLIENT_ID='82d1452c81a240b188d51ad01fa47a1d'
 CLIENT_SECRET='toFpQx2zsqVDjiUr1Be4k3R6759fl0ICLM8YgXwc'
 CS_CCID='EF35878C5A06464CB6B3B7EF692019BE-68'
+SUDO=''
+OS_ID=`awk -F'=' '/^ID=/ { gsub("\"","",$2); print tolower($2) }' /etc/os-release 2> /dev/null`
+MAJOR_VERSION_ID=`awk -F'=' '/^VERSION_ID=/ { gsub("\"","",$2); sub(/\..*/,"",$NF); print $2 }' /etc/os-release 2> /dev/null`
 
-if [[ $EUID -ne 0 ]]; then
-	echo "This script must be run as root" 
+### Exit Conditions
+# CS running
+if [ "$(ps -e | grep -i falcon)" ]; then
+	echo "CrowdStrike Falcon is already installed and operational."
 	exit 1
 fi
 
-get_access_token() {
+### Set SUDO
+if [[ $EUID -ne 0 ]]; then
+	SUDO='sudo'
+fi
+###
+
+### Define functions
+get_token() {
 	curl -s -X POST -d "client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}" "https://api.crowdstrike.com/oauth2/token" | \
 	 awk '/access_token/ { gsub(/[",]/,""); print $2}'
 }
 
 get_sha256() {
-	curl -s -H "Authorization: Bearer ${1}" "https://api.crowdstrike.com/sensors/combined/installers/v1?offset=2&limit=1&sort=release_date%7Cdesc&filter=platform%3A%22mac%22" | \
+	curl -s -H "Authorization: Bearer ${1}" "https://api.crowdstrike.com/sensors/combined/installers/v1?offset=2&limit=1&sort=version%7Cdesc&filter=${FILTER}" | \
 	 awk '/sha256/ { gsub(/[",]/,""); print $2}'
 }
 
-if [ -z "$(/Applications/Falcon.app/Contents/Resources/falconctl stats | grep 'Sensor operational: true')" ]; then
-	APITOKEN=$(get_access_token)
-	FALCON_LATEST_SHA256=$(get_sha256 ${APITOKEN})
-	curl -o /tmp/FalconSensorMacOS.pkg -s -H "Authorization: Bearer ${APITOKEN}" "https://api.crowdstrike.com/sensors/entities/download-installer/v1?id=${FALCON_LATEST_SHA256}"
-	installer -verboseR -package /tmp/FalconSensorMacOS.pkg -target /
-	rm /tmp/FalconSensorMacOS.pkg
-	/Applications/Falcon.app/Contents/Resources/falconctl license ${CS_CCID} || true # Don't fail if the app is already licensed, but still needs a reinstall
-	/Applications/Falcon.app/Contents/Resources/falconctl unload
-	/Applications/Falcon.app/Contents/Resources/falconctl load
-else
-	echo "Crowdstrike Falcon is installed and operational"
-fi
+ubuntu_install() {
+	echo "Ubuntu/Debian install selected, downloading installer"
+	$SUDO curl -o /tmp/FalconSensor.deb -s -H "Authorization: Bearer ${APITOKEN}" "https://api.crowdstrike.com/sensors/entities/download-installer/v1?id=${FALCON_SHA256}"
+	echo "Installing Falcon Sensor"
+	$SUDO apt -y install /tmp/FalconSensor.deb
+	echo "Installation completed, removing sensor installer"
+	$SUDO rm /tmp/FalconSensor.deb
+	$SUDO /opt/CrowdStrike/falconctl -s --cid=${CS_CCID} || true # Don't fail if the app is already licensed, but still needs a reinstall
+	echo "Licensing completed, starting falcon-sensor"
+	$SUDO systemctl start falcon-sensor
+}>&2
+
+fedora_install() {
+	echo "Fedora-based install selected, downloading installer"
+	$SUDO curl -o /tmp/FalconSensor.rpm -s -H "Authorization: Bearer ${APITOKEN}" "https://api.crowdstrike.com/sensors/entities/download-installer/v1?id=${FALCON_SHA256}"
+	echo "Installing Falcon Sensor"
+	$SUDO yum -y install /tmp/FalconSensor.rpm
+	echo "Installation completed, removing sensor installer"
+	$SUDO rm /tmp/FalconSensor.rpm
+	$SUDO /opt/CrowdStrike/falconctl -s --cid=${CS_CCID} || true # Don't fail if the app is already licensed, but still needs a reinstall
+	echo "Licensing completed, starting falcon-sensor"
+}>&2
+
+sles_install() {
+	echo "SLES install selected, downloading installer"
+	$SUDO curl -o /tmp/FalconSensor.rpm -s -H "Authorization: Bearer ${APITOKEN}" "https://api.crowdstrike.com/sensors/entities/download-installer/v1?id=${FALCON_SHA256}"
+	echo "Installing Falcon Sensor"
+	$SUDO zypper install -y /tmp/FalconSensor.rpm
+	echo "Installation completed, removing sensor installer"
+	$SUDO rm /tmp/FalconSensor.rpm
+	$SUDO /opt/CrowdStrike/falconctl -s --cid=${CS_CCID} || true # Don't fail if the app is already licensed, but still needs a reinstall
+	echo "Licensing completed, starting falcon-sensor"
+}>&2
+###
+
+case $OS_ID in
+	ubuntu|debian)
+			FILTER="os%3A%22Ubuntu%22%2Bos_version%3A%2214%2F16%2F18%2F20%2F22%22"
+			APITOKEN=$(get_token)
+			FALCON_SHA256=$(get_sha256 ${APITOKEN})
+			$(ubuntu_install)
+			;;
+	rhel|ol|centos)
+			case $MAJOR_VERSION_ID in
+				6)
+					FILTER="os%3A%22RHEL%2FCentOS%2FOracle%22%2Bos_version%3A%226%22"
+					APITOKEN=$(get_token)
+					FALCON_SHA256=$(get_sha256 ${APITOKEN})
+					$(fedora_install)
+					$SUDO service falcon-sensor start
+					;;
+				7)
+					FILTER="os%3A%22RHEL%2FCentOS%2FOracle%22%2Bos_version%3A%227%22"
+					APITOKEN=$(get_token)
+					FALCON_SHA256=$(get_sha256 ${APITOKEN})
+					$(fedora_install)
+					$SUDO systemctl start falcon-sensor
+					;;
+				8)
+					FILTER="os%3A%22RHEL%2FCentOS%2FOracle%22%2Bos_version%3A%228%22"
+					APITOKEN=$(get_token)
+					FALCON_SHA256=$(get_sha256 ${APITOKEN})
+					$(fedora_install)
+					$SUDO systemctl start falcon-sensor
+					;;
+				9)
+					FILTER="os%3A%22RHEL%2FOracle%22"
+					APITOKEN=$(get_token)
+					FALCON_SHA256=$(get_sha256 ${APITOKEN})
+					$(fedora_install)
+					$SUDO systemctl start falcon-sensor
+					;;
+			esac
+			;;
+	sles)
+			case $MAJOR_VERSION_ID in
+				11)
+					FILTER="os%3A%22SLES%22%2Bos_version%3A%2211%22"
+					APITOKEN=$(get_token)
+					FALCON_SHA256=$(get_sha256 ${APITOKEN})
+					$(sles_install)
+					$SUDO service falcon-sensor start
+					;;
+				12)
+					FILTER="os%3A%22SLES%22%2Bos_version%3A%2212%22"
+					APITOKEN=$(get_token)
+					FALCON_SHA256=$(get_sha256 ${APITOKEN})
+					$(sles_install)
+					$SUDO systemctl start falcon-sensor
+					;;
+				15)
+					FILTER="os%3A%22SLES%22%2Bos_version%3A%2215%22"
+					APITOKEN=$(get_token)
+					FALCON_SHA256=$(get_sha256 ${APITOKEN})
+					$(sles_install)
+					$SUDO systemctl start falcon-sensor
+					;;
+			esac
+			;;
+	amzn)
+			case $MAJOR_VERSION_ID in
+				1)
+					FILTER="os%3A%22Amazon%20Linux%22%2Bos_version%3A%221%22"
+					APITOKEN=$(get_token)
+					FALCON_SHA256=$(get_sha256 ${APITOKEN})
+					$(fedora_install)
+					$SUDO systemctl start falcon-sensor
+					;;
+				2)
+					FILTER="os%3A%22Amazon%20Linux%22%2Bos_version%3A%222%22"
+					APITOKEN=$(get_token)
+					FALCON_SHA256=$(get_sha256 ${APITOKEN})
+					$(fedora_install)
+					$SUDO systemctl start falcon-sensor
+					;;
+			esac
+			;;
+esac
