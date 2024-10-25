@@ -69,7 +69,7 @@ sles_install() {
 
 case $OS_ID in
 	ubuntu|debian)
-			FILTER="os%3A%22Ubuntu%22%2Bos_version%3A%2214%2F16%2F18%2F20%2F22%22"
+			FILTER="os%3A%22Ubuntu%22%2Bos_version%3A%2216%2F18%2F20%2F22%22"
 			APITOKEN=$(get_token)
 			FALCON_SHA256=$(get_sha256 ${APITOKEN})
 			$(ubuntu_install)
@@ -77,7 +77,7 @@ case $OS_ID in
 	rhel|ol|centos)
 			case $MAJOR_VERSION_ID in
 				6)
-					FILTER="os%3A%22RHEL%2FCentOS%2FOracle%22%2Bos_version%3A%226%22"
+					FILTER="os%3A%22Oracle%22%2Bos_version%3A%226%22"
 					APITOKEN=$(get_token)
 					FALCON_SHA256=$(get_sha256 ${APITOKEN})
 					$(fedora_install)
@@ -98,7 +98,7 @@ case $OS_ID in
 					$SUDO systemctl start falcon-sensor
 					;;
 				9)
-					FILTER="os%3A%22RHEL%2FOracle%22"
+					FILTER="os%3A%22RHEL%2FCentOS%20Stream%2FOracle%22%2Bos_version%3A%229%22"
 					APITOKEN=$(get_token)
 					FALCON_SHA256=$(get_sha256 ${APITOKEN})
 					$(fedora_install)
@@ -108,13 +108,6 @@ case $OS_ID in
 			;;
 	sles)
 			case $MAJOR_VERSION_ID in
-				11)
-					FILTER="os%3A%22SLES%22%2Bos_version%3A%2211%22"
-					APITOKEN=$(get_token)
-					FALCON_SHA256=$(get_sha256 ${APITOKEN})
-					$(sles_install)
-					$SUDO service falcon-sensor start
-					;;
 				12)
 					FILTER="os%3A%22SLES%22%2Bos_version%3A%2212%22"
 					APITOKEN=$(get_token)
@@ -133,8 +126,8 @@ case $OS_ID in
 			;;
 	amzn)
 			case $MAJOR_VERSION_ID in
-				1)
-					FILTER="os%3A%22Amazon%20Linux%22%2Bos_version%3A%221%22"
+				2023)
+					FILTER="os%3A%22Amazon%20Linux%22%2Bos_version%3A%222023%22"
 					APITOKEN=$(get_token)
 					FALCON_SHA256=$(get_sha256 ${APITOKEN})
 					$(fedora_install)
